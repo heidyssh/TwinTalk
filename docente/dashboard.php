@@ -1,0 +1,69 @@
+<?php
+require_once __DIR__ . "/../config/db.php";
+require_once __DIR__ . "/../includes/auth.php";
+require_role([2]); // rol docente
+
+$docente_id = $_SESSION['usuario_id'];
+
+$cursos = $mysqli->prepare("
+    SELECT h.id AS horario_id, c.nombre_curso, n.codigo_nivel,
+           d.nombre_dia, h.hora_inicio, h.hora_fin, h.aula
+    FROM horarios h
+    JOIN cursos c ON h.curso_id = c.id
+    JOIN niveles_academicos n ON c.nivel_id = n.id
+    JOIN dias_semana d ON h.dia_semana_id = d.id
+    WHERE h.docente_id = ?
+    ORDER BY h.fecha_inicio DESC
+");
+$cursos->bind_param("i", $docente_id);
+$cursos->execute();
+$res_cursos = $cursos->get_result();
+
+include __DIR__ . "/../includes/header.php";
+?>
+
+<h1 class="h4 fw-bold mt-3">Panel del docente</h1>
+<p class="text-muted mb-3">
+    Administra tus cursos, registra calificaciones y publica anuncios.
+</p>
+
+<div class="card card-soft p-3">
+    <h2 class="h6 fw-bold mb-2">Mis cursos</h2>
+    <div class="table-responsive table-rounded mt-2">
+        <table class="table align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Curso</th>
+                <th>Nivel</th>
+                <th>Día</th>
+                <th>Hora</th>
+                <th>Aula</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php if ($res_cursos->num_rows > 0): ?>
+                <?php while ($row = $res_cursos->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($row['nombre_curso']) ?></td>
+                        <td><?= htmlspecialchars($row['codigo_nivel']) ?></td>
+                        <td><?= htmlspecialchars($row['nombre_dia']) ?></td>
+                        <td><?= substr($row['hora_inicio'],0,5) ?> - <?= substr($row['hora_fin'],0,5) ?></td>
+                        <td><?= htmlspecialchars($row['aula']) ?></td>
+                        <td>
+                            <a href="curso_detalle.php?id=<?= (int)$row['horario_id'] ?>"
+                               class="btn btn-sm btn-tt-primary">
+                                Ver curso
+                            </a>
+                        </td>
+                    </tr>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <tr><td colspan="6" class="text-muted">Aún no tienes cursos asignados.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<?php include __DIR__ . "/../includes/footer.php"; ?>
