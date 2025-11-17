@@ -202,11 +202,33 @@ include __DIR__ . "/../includes/header.php";
             <form method="post">
                 <div class="mb-3">
                     <label class="form-label">Nueva contraseña</label>
-                    <input type="password" name="password" class="form-control">
+                    <div class="position-relative">
+                        <input type="password"
+                               name="password"
+                               class="form-control pe-5"
+                               id="perfil_password">
+                        <button type="button"
+                                class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                title="Mostrar/ocultar contraseña"
+                                onclick="ttTogglePassword('perfil_password', this)">
+                            <i class="fa-solid fa-eye small text-muted"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Repetir nueva contraseña</label>
-                    <input type="password" name="password2" class="form-control">
+                    <div class="position-relative">
+                        <input type="password"
+                               name="password2"
+                               class="form-control pe-5"
+                               id="perfil_password2">
+                        <button type="button"
+                                class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                title="Mostrar/ocultar contraseña"
+                                onclick="ttTogglePassword('perfil_password2', this)">
+                            <i class="fa-solid fa-eye small text-muted"></i>
+                        </button>
+                    </div>
                 </div>
                 <button class="btn btn-outline-secondary" name="cambiar_password">Actualizar contraseña</button>
             </form>
@@ -253,5 +275,27 @@ include __DIR__ . "/../includes/header.php";
         </div>
     </div>
 </div>
+
+<script>
+function ttTogglePassword(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = btn.querySelector('i');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) {
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        }
+    } else {
+        input.type = 'password';
+        if (icon) {
+            icon.classList.add('fa-eye');
+            icon.classList.remove('fa-eye-slash');
+        }
+    }
+}
+</script>
 
 <?php include __DIR__ . "/../includes/footer.php"; ?>

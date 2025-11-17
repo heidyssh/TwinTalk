@@ -32,12 +32,6 @@ $cursos = $mysqli->query("
     LIMIT 6
 ");
 
-// Niveles académicos
-$niveles = $mysqli->query("
-    SELECT id, codigo_nivel, nombre_nivel, descripcion
-    FROM niveles_academicos
-    ORDER BY id ASC
-");
 ?>
 
 <!-- HERO -->
@@ -156,56 +150,6 @@ $niveles = $mysqli->query("
                 </ul>
             </div>
         </div>
-    </div>
-</section>
-
-<!-- SEPARADOR -->
-<hr class="section-divider">
-
-<!-- NIVELES ACADÉMICOS -->
-<section id="niveles" class="section-padding">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="section-title mb-0">Niveles de inglés 📊</h2>
-        <span class="small text-muted">Comienza donde estás y sube paso a paso.</span>
-    </div>
-
-    <div class="row g-3">
-        <?php if ($niveles && $niveles->num_rows > 0): ?>
-            <?php while ($niv = $niveles->fetch_assoc()): ?>
-                <div class="col-md-6 col-lg-3">
-                    <div class="card card-soft h-100 p-3">
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="badge-level">
-                                <?= htmlspecialchars($niv['codigo_nivel']) ?>
-                            </span>
-                            <span class="small text-muted">🎯 Progreso guiado</span>
-                        </div>
-                        <h5 class="fw-bold mb-2"><?= htmlspecialchars($niv['nombre_nivel']) ?></h5>
-                        <p class="small text-muted mb-0">
-                            <?php if (!empty($niv['descripcion'])): ?>
-                                <?= nl2br(htmlspecialchars($niv['descripcion'])) ?>
-                            <?php else: ?>
-                                <?php if ($niv['codigo_nivel'] === 'A1'): ?>
-                                    Ideal si empiezas desde cero o recuerdas muy poco del idioma. 🧱
-                                <?php elseif ($niv['codigo_nivel'] === 'A2'): ?>
-                                    Reafirma tus bases y amplía vocabulario del día a día. ☕🛒
-                                <?php elseif ($niv['codigo_nivel'] === 'B1'): ?>
-                                    Te prepara para conversaciones más fluidas, estudios y trabajo. 🎓
-                                <?php else: ?>
-                                    Nivel alineado al Marco Común Europeo para seguir avanzando. 📘
-                                <?php endif; ?>
-                            <?php endif; ?>
-                        </p>
-                    </div>
-                </div>
-            <?php endwhile; ?>
-        <?php else: ?>
-            <div class="col-12">
-                <p class="small text-muted mb-0">
-                    Los niveles se configurarán pronto en el sistema. Por ahora, trabajamos con niveles A1, A2 y B1.
-                </p>
-            </div>
-        <?php endif; ?>
     </div>
 </section>
 
@@ -351,6 +295,49 @@ $niveles = $mysqli->query("
 
 <!-- SEPARADOR -->
 <hr class="section-divider">
+
+<!-- SECCIÓN NUEVA: FUNDADORA -->
+
+<!-- SOBRE LA FUNDADORA -->
+<section id="fundadora" class="section-padding">
+    <div class="row g-4 align-items-center">
+        <div class="col-lg-5">
+            <div class="card card-soft p-3 text-center h-100">
+                <img src="/twintalk/assets/img/dueña.jpg"
+                     alt="Kiara Saunders, fundadora de TwinTalk English"
+                     class="img-fluid rounded-4 mb-3"
+                     style="max-height:320px; object-fit:cover;">
+                <p class="small text-muted mb-0">
+                    Kiara Saunders · Fundadora y directora de TwinTalk English
+                </p>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card card-soft p-3 h-100">
+                <h2 class="section-title h4 mb-2">La historia detrás de TwinTalk English 💡</h2>
+                <p class="small text-muted mb-2">
+                    TwinTalk English nació como un sueño de emprendimiento de <strong>Kiara Saunders</strong>, quien
+                    comenzó dando clases personalizadas de inglés a estudiantes que querían mejorar sus oportunidades
+                    académicas y laborales en La Ceiba.
+                </p>
+                <p class="small text-muted mb-2">
+                    Al ver que muchos alumnos tenían miedo de hablar, pero muchísimo potencial, decidió crear una
+                    academia pequeña, cercana y humana, donde cada estudiante fuera escuchado, acompañado y motivado
+                    a <strong>perder el miedo al inglés</strong> paso a paso.
+                </p>
+                <p class="small text-muted mb-0">
+                    Hoy, TwinTalk English es un espacio donde niños, jóvenes y adultos pueden aprender en grupos
+                    reducidos, con metodologías prácticas y un ambiente de confianza. La visión de Kiara es que
+                    más personas de la región puedan acceder a becas, mejores trabajos y experiencias internacionales
+                    gracias al inglés. ✈️📚
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- SEPARADOR -->
+<hr class="section-divider">
+
 
 <!-- CONTACTO -->
 <section id="contacto" class="section-padding">

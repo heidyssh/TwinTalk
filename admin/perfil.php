@@ -229,28 +229,48 @@ include __DIR__ . "/../includes/header.php";
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-3">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">Cambiar contraseña</h5>
-                    <form method="post">
-                        <div class="row g-2">
-                            <div class="col-md-6">
-                                <label class="form-label">Nueva contraseña</label>
-                                <input type="password" name="password" class="form-control" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Repetir contraseña</label>
-                                <input type="password" name="password2" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="mt-3 text-end">
-                            <button type="submit" name="cambiar_password" class="btn btn-warning">
-                                Actualizar contraseña
-                            </button>
-                        </div>
-                    </form>
+            <!-- Cambio de contraseña -->
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <h2 class="h6 fw-bold mb-3">Cambio de contraseña</h2>
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Nueva contraseña</label>
+                <div class="position-relative">
+                    <input type="password"
+                           name="password"
+                           class="form-control pe-5"
+                           id="admin_password">
+                    <button type="button"
+                            class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                            title="Mostrar/ocultar contraseña"
+                            onclick="ttTogglePassword('admin_password', this)">
+                        <i class="fa-solid fa-eye small text-muted"></i>
+                    </button>
                 </div>
             </div>
+            <div class="mb-3">
+                <label class="form-label">Repetir nueva contraseña</label>
+                <div class="position-relative">
+                    <input type="password"
+                           name="password2"
+                           class="form-control pe-5"
+                           id="admin_password2">
+                    <button type="button"
+                            class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                            title="Mostrar/ocultar contraseña"
+                            onclick="ttTogglePassword('admin_password2', this)">
+                        <i class="fa-solid fa-eye small text-muted"></i>
+                    </button>
+                </div>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm w-100" name="cambiar_password">
+                Actualizar contraseña
+            </button>
+        </form>
+    </div>
+</div>
+
 
             <div class="card shadow-sm mb-3">
                 <div class="card-body">
@@ -297,5 +317,27 @@ include __DIR__ . "/../includes/header.php";
         </div>
     </div>
 </div>
+<script>
+function ttTogglePassword(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = btn.querySelector('i');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) {
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        }
+    } else {
+        input.type = 'password';
+        if (icon) {
+            icon.classList.add('fa-eye');
+            icon.classList.remove('fa-eye-slash');
+        }
+    }
+}
+</script>
+
 
 <?php include __DIR__ . "/../includes/footer.php"; ?>

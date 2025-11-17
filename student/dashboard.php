@@ -7,9 +7,16 @@ $usuario_id = $_SESSION['usuario_id'];
 
 // Cursos donde YA está matriculado
 $mis_cursos = $mysqli->prepare("
-    SELECT m.id AS matricula_id, c.nombre_curso, n.codigo_nivel,
-           h.hora_inicio, h.hora_fin, d.nombre_dia,
-           u.nombre AS docente_nombre, u.apellido AS docente_apellido
+    SELECT 
+        m.id AS matricula_id, 
+        h.id AS horario_id,            -- 👈 aquí agregamos el horario
+        c.nombre_curso, 
+        n.codigo_nivel,
+        h.hora_inicio, 
+        h.hora_fin, 
+        d.nombre_dia,
+        u.nombre AS docente_nombre, 
+        u.apellido AS docente_apellido
     FROM matriculas m
     JOIN horarios h ON m.horario_id = h.id
     JOIN cursos c ON h.curso_id = c.id
@@ -45,6 +52,36 @@ $disponibles->bind_param("i", $usuario_id);
 $disponibles->execute();
 $res_disponibles = $disponibles->get_result();
 
+// Anuncios recientes para este estudiante (máx 3)
+$sqlAnuncios = "
+    SELECT 
+        a.titulo,
+        a.fecha_publicacion,
+        a.importante,
+        c.nombre_curso
+    FROM anuncios a
+    INNER JOIN tipos_anuncio ta ON a.tipo_anuncio_id = ta.id
+    LEFT JOIN horarios h ON a.horario_id = h.id
+    LEFT JOIN cursos c ON h.curso_id = c.id
+    WHERE
+        (
+            a.horario_id IS NULL
+            OR a.horario_id IN (
+                SELECT m.horario_id
+                FROM matriculas m
+                INNER JOIN estados_matricula em ON m.estado_id = em.id
+                WHERE m.estudiante_id = ? AND em.nombre_estado = 'Activa'
+            )
+        )
+        AND (a.fecha_expiracion IS NULL OR a.fecha_expiracion >= CURDATE())
+    ORDER BY a.importante DESC, a.fecha_publicacion DESC
+    LIMIT 3
+";
+$anuncios_stmt = $mysqli->prepare($sqlAnuncios);
+$anuncios_stmt->bind_param("i", $usuario_id);
+$anuncios_stmt->execute();
+$res_anuncios = $anuncios_stmt->get_result();
+
 include __DIR__ . "/../includes/header.php";
 ?>
 
@@ -73,6 +110,7 @@ include __DIR__ . "/../includes/header.php";
                             <th>Docente</th>
                             <th>Día</th>
                             <th>Hora</th>
+                            <th>Acciones</th> <!-- 👈 nueva columna -->
                         </tr>
                         </thead>
                         <tbody>
@@ -85,6 +123,12 @@ include __DIR__ . "/../includes/header.php";
                                 <td><?= htmlspecialchars($row['docente_nombre'] . " " . $row['docente_apellido']) ?></td>
                                 <td><?= htmlspecialchars($row['nombre_dia']) ?></td>
                                 <td><?= substr($row['hora_inicio'],0,5) ?> - <?= substr($row['hora_fin'],0,5) ?></td>
+                                <td>
+                                    <a href="curso_detalle.php?horario_id=<?= (int)$row['horario_id'] ?>"
+                                       class="btn btn-sm btn-outline-secondary">
+                                        Ver detalles
+                                    </a>
+                                </td>
                             </tr>
                         <?php endwhile; ?>
                         </tbody>
@@ -125,6 +169,48 @@ include __DIR__ . "/../includes/header.php";
                 <?php endwhile; ?>
             <?php else: ?>
                 <p class="text-muted mb-0">No hay cursos disponibles para ti en este momento.</p>
+            <?php endif; ?>
+        </div>
+
+        <div class="card card-soft p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 fw-bold mb-0">Anuncios recientes</h2>
+                <a href="anuncios.php" class="small">Ver todos ›</a>
+            </div>
+
+            <?php if ($res_anuncios->num_rows > 0): ?>
+                <ul class="list-unstyled mb-0">
+                    <?php while ($a = $res_anuncios->fetch_assoc()): ?>
+                        <li class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <?php if ($a['importante']): ?>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
+                                            ¡Importante!
+                                        </span>
+                                    <?php endif; ?>
+                                    <strong class="small d-block">
+                                        <?= htmlspecialchars($a['titulo']) ?>
+                                    </strong>
+                                    <?php if (!empty($a['nombre_curso'])): ?>
+                                        <span class="badge bg-light text-muted border small">
+                                            <?= htmlspecialchars($a['nombre_curso']) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="badge bg-light text-muted border small">
+                                            General
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                                <small class="text-muted ms-2">
+                                    <?= date('d/m', strtotime($a['fecha_publicacion'])) ?>
+                                </small>
+                            </div>
+                        </li>
+                    <?php endwhile; ?>
+                </ul>
+            <?php else: ?>
+                <p class="small text-muted mb-0">Aún no hay anuncios para tus cursos.</p>
             <?php endif; ?>
         </div>
 

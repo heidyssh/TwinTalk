@@ -13,11 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
-        $errores[] = "Ingresa tu correo y contraseña.";
+        $errores[] = "Por favor llena tu correo y contraseña.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errores[] = "Correo electrónico inválido.";
     } else {
-        $stmt = $mysqli->prepare("SELECT id, password_hash, rol_id, activo FROM usuarios WHERE email = ? LIMIT 1");
+        $stmt = $mysqli->prepare("SELECT id, password_hash, rol_id, activo, nombre, apellido, email FROM usuarios WHERE email = ? LIMIT 1");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -31,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Login correcto
                 $_SESSION['usuario_id'] = (int)$row['id'];
                 $_SESSION['rol_id']     = (int)$row['rol_id'];
+                $_SESSION['nombre']     = $row['nombre'] ?? '';
+                $_SESSION['apellido']   = $row['apellido'] ?? '';
+                $_SESSION['email']      = $row['email'] ?? '';
 
                 redirect_by_role();
                 exit;
@@ -47,10 +50,12 @@ include __DIR__ . "/includes/header.php";
 <div class="row justify-content-center mt-5">
     <div class="col-md-6 col-lg-5">
         <div class="card card-soft p-4">
-            <h1 class="h4 fw-bold mb-3 text-center">Iniciar sesión</h1>
+            <h1 class="h4 fw-bold mb-3 text-center">
+                Iniciar sesión
+            </h1>
 
-            <?php if (isset($_GET['registro']) && $_GET['registro'] === 'ok'): ?>
-                <div class="alert alert-success rounded-4 small">
+            <?php if (isset($_GET['registered']) && $_GET['registered'] == 1): ?>
+                <div class="alert alert-success">
                     🎉 ¡Tu cuenta fue creada con éxito! Ahora inicia sesión con tu correo y contraseña.
                 </div>
             <?php endif; ?>
@@ -69,21 +74,22 @@ include __DIR__ . "/includes/header.php";
                     <input type="email" name="email" class="form-control" required
                            value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
                 </div>
+
                 <div class="mb-3">
                     <label class="form-label">Contraseña</label>
-                    <div class="input-group">
+                    <div class="position-relative">
                         <input
                             type="password"
                             name="password"
                             id="login_password"
-                            class="form-control"
-                            minlength="8"
+                            class="form-control pe-5"
                             required
                         >
                         <button type="button"
-                                class="btn btn-outline-secondary"
+                                class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                title="Mostrar/ocultar contraseña"
                                 onclick="ttTogglePassword('login_password', this)">
-                            <i class="fa-regular fa-eye"></i>
+                            <i class="fa-solid fa-eye small text-muted"></i>
                         </button>
                     </div>
                 </div>
@@ -92,7 +98,7 @@ include __DIR__ . "/includes/header.php";
 
                 <p class="small text-center text-muted mt-2 mb-0">
                     ¿Aún no tienes cuenta?
-                    <a href="/twintalk/register.php" class="text-decoration-none">Regístrate aquí</a>.
+                    <a href="/twintalk/register.php">Regístrate aquí</a>
                 </p>
             </form>
         </div>

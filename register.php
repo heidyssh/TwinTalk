@@ -22,9 +22,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errores[] = "Correo electrónico inválido.";
     }
-    // mínimo 8 caracteres
-    if (strlen($password) < 8) {
-        $errores[] = "La contraseña debe tener al menos 8 caracteres.";
+
+    // Validación de contraseña segura
+    if (strlen($password) < 12) {
+        $errores[] = "La contraseña debe tener al menos 12 caracteres.";
+    }
+    if (
+        !preg_match('/[A-Z]/', $password) ||
+        !preg_match('/[a-z]/', $password) ||
+        !preg_match('/\d/', $password) ||
+        !preg_match('/[\W_]/', $password)
+    ) {
+        $errores[] = "La contraseña debe incluir mayúsculas, minúsculas, números y caracteres especiales.";
     }
     if ($password !== $password2) {
         $errores[] = "Las contraseñas no coinciden.";
@@ -42,7 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rol_estudiante = 3; // estudiante por defecto
 
             $stmt = $mysqli->prepare("
-                INSERT INTO usuarios (email, password_hash, rol_id, nombre, apellido, telefono, fecha_registro, activo)
+                INSERT INTO usuarios (
+                    email, password_hash, rol_id, nombre, apellido, telefono, fecha_registro, activo)
                 VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)
             ");
             $stmt->bind_param("ssisss", $email, $hash, $rol_estudiante, $nombre, $apellido, $telefono);
@@ -59,12 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins_est->bind_param("is", $usuario_id, $nivel_actual);
                 $ins_est->execute();
 
-                // Redirigir al login
-                header("Location: /twintalk/login.php?registro=ok");
+                header("Location: /twintalk/login.php?registered=1");
                 exit;
-
             } else {
-                $errores[] = "Error al crear usuario: " . $mysqli->error;
+                $errores[] = "Error al crear la cuenta. Intenta de nuevo.";
             }
         }
     }
@@ -113,39 +121,46 @@ include __DIR__ . "/includes/header.php";
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Contraseña *</label>
-                        <div class="input-group">
+                        <div class="position-relative">
                             <input
                                 type="password"
                                 name="password"
                                 id="reg_password"
-                                class="form-control"
-                                minlength="8"
+                                class="form-control pe-5"
+                                minlength="12"
                                 required
-                                placeholder="Mínimo 8 caracteres"
+                                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{12,}"
+                                title="Mínimo 12 caracteres e incluir mayúsculas, minúsculas, números y caracteres especiales"
+                                placeholder="Mínimo 12 caracteres, con mayúsculas, minúsculas, números y símbolos"
                             >
                             <button type="button"
-                                    class="btn btn-outline-secondary"
+                                    class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                    title="Mostrar/ocultar contraseña"
                                     onclick="ttTogglePassword('reg_password', this)">
-                                <i class="fa-regular fa-eye"></i>
+                                <i class="fa-solid fa-eye small text-muted"></i>
                             </button>
                         </div>
+                        <small class="form-text text-muted">
+                            La contraseña debe tener al menos 12 caracteres e incluir mayúsculas, minúsculas, números y caracteres especiales.
+                        </small>
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Confirmar contraseña *</label>
-                        <div class="input-group">
+                        <div class="position-relative">
                             <input
                                 type="password"
                                 name="password2"
                                 id="reg_password2"
-                                class="form-control"
-                                minlength="8"
+                                class="form-control pe-5"
+                                minlength="12"
                                 required
                                 placeholder="Repite tu contraseña"
                             >
                             <button type="button"
-                                    class="btn btn-outline-secondary"
+                                    class="btn btn-link p-0 border-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                    title="Mostrar/ocultar contraseña"
                                     onclick="ttTogglePassword('reg_password2', this)">
-                                <i class="fa-regular fa-eye"></i>
+                                <i class="fa-solid fa-eye small text-muted"></i>
                             </button>
                         </div>
                     </div>
