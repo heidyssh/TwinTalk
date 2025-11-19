@@ -158,11 +158,17 @@ include __DIR__ . "/../includes/header.php";
 ?>
 
 <div class="row mt-3">
-    <div class="col-12 mb-3">
-        <h1 class="h4 fw-bold">
-            Hola, <?= htmlspecialchars($_SESSION['nombre']) ?> 👋
-        </h1>
-        <p class="text-muted mb-0">Bienvenido a tu dashboard de estudiante.</p>
+    <div class="col-12 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h4 fw-bold mb-1">
+                Hola, <?= htmlspecialchars($_SESSION['nombre']) ?> 👋
+            </h1>
+            <p class="text-muted mb-0">Bienvenido a tu dashboard de estudiante.</p>
+        </div>
+        <a href="calendario.php" class="btn btn-outline-primary btn-sm">
+            <i class="fa-solid fa-calendar-days me-1"></i>
+            Calendario de asignaciones
+        </a>
     </div>
 </div>
 <div class="row g-3 mb-3">
