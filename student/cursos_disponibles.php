@@ -5,7 +5,7 @@ require_role([3]);
 
 $usuario_id = $_SESSION['usuario_id'];
 $mensaje = "";
-$error = "";
+$error   = "";
 
 // Obtener id de estado "Activa" para la matrícula
 function obtenerEstadoActiva($mysqli) {
@@ -16,6 +16,40 @@ function obtenerEstadoActiva($mysqli) {
     return null;
 }
 
+// Obtener el nivel máximo que el estudiante ha FINALIZADO (estado 'Finalizada')
+function obtenerNivelMaximoFinalizado($mysqli, $estudiante_id) {
+    $sql = "
+        SELECT MAX(c.nivel_id) AS max_nivel
+        FROM matriculas m
+        INNER JOIN horarios h           ON m.horario_id = h.id
+        INNER JOIN cursos c             ON h.curso_id = c.id
+        INNER JOIN estados_matricula em ON m.estado_id = em.id
+        WHERE m.estudiante_id = ?
+          AND em.nombre_estado = 'Finalizada'
+    ";
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("i", $estudiante_id);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return $res && $res['max_nivel'] !== null ? (int)$res['max_nivel'] : 0;
+}
+
+// Obtener el código (A1, A2, B1...) de un nivel por id
+function obtenerCodigoNivel($mysqli, $nivel_id) {
+    if ($nivel_id <= 0) return null;
+    $stmt = $mysqli->prepare("SELECT codigo_nivel FROM niveles_academicos WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $nivel_id);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $res ? $res['codigo_nivel'] : null;
+}
+
+// --------------------------------------------------------
+// PROCESAR MATRICULACIÓN (backend protegido con requisito)
+// --------------------------------------------------------
 if (isset($_GET['matricular'])) {
     $horario_id = (int) $_GET['matricular'];
 
@@ -23,37 +57,104 @@ if (isset($_GET['matricular'])) {
     if (!$estado_activa_id) {
         $error = "No se encontró el estado de matrícula 'Activa'. Pídale al admin que lo cree en la tabla estados_matricula.";
     } else {
-        // ¿ya está matriculado?
-        $check = $mysqli->prepare("
-            SELECT id FROM matriculas
-            WHERE estudiante_id = ? AND horario_id = ? AND estado_id = ?
+
+        // 1) Obtener el nivel del curso al que se quiere matricular
+        $stmtCurso = $mysqli->prepare("
+            SELECT c.id AS curso_id, c.nivel_id, n.codigo_nivel
+            FROM horarios h
+            INNER JOIN cursos c ON h.curso_id = c.id
+            INNER JOIN niveles_academicos n ON c.nivel_id = n.id
+            WHERE h.id = ?
+            LIMIT 1
         ");
-        $check->bind_param("iii", $usuario_id, $horario_id, $estado_activa_id);
-        $check->execute();
-        if ($check->get_result()->num_rows > 0) {
-            $error = "Ya estás matriculado en este horario.";
+        $stmtCurso->bind_param("i", $horario_id);
+        $stmtCurso->execute();
+        $cursoData = $stmtCurso->get_result()->fetch_assoc();
+        $stmtCurso->close();
+
+        if (!$cursoData) {
+            $error = "El horario seleccionado no existe.";
         } else {
-            // Insertar matrícula
-            $ins = $mysqli->prepare("
-                INSERT INTO matriculas (estudiante_id, horario_id, fecha_matricula, estado_id)
-                VALUES (?, ?, NOW(), ?)
-            ");
-            $ins->bind_param("iii", $usuario_id, $horario_id, $estado_activa_id);
-            if ($ins->execute()) {
-                // reducir cupos
-                $mysqli->query("UPDATE horarios SET cupos_disponibles = cupos_disponibles - 1 WHERE id = $horario_id AND cupos_disponibles > 0");
-                $mensaje = "¡Matrícula realizada con éxito!";
+            $nivel_curso     = (int)$cursoData['nivel_id'];      // nivel del curso (1 = A1, 2 = A2, etc.)
+            $codigo_nivel    = $cursoData['codigo_nivel'];       // A1, A2...
+            $max_nivel_final = obtenerNivelMaximoFinalizado($mysqli, $usuario_id);
+
+            $cumple_requisito = true;
+            $mensaje_requisito = "";
+
+            if ($nivel_curso > 1) {
+                // Requiere haber completado al menos el nivel anterior
+                $nivel_requerido_id = $nivel_curso - 1;
+                $codigo_requerido   = obtenerCodigoNivel($mysqli, $nivel_requerido_id);
+
+                if ($max_nivel_final < $nivel_requerido_id) {
+                    $cumple_requisito = false;
+                    if ($codigo_requerido) {
+                        $mensaje_requisito = "Este curso es de nivel {$codigo_nivel}. Debes completar primero el nivel {$codigo_requerido}.";
+                    } else {
+                        $mensaje_requisito = "No cumples el requisito de nivel para este curso.";
+                    }
+                }
+            }
+
+            if (!$cumple_requisito) {
+                $error = $mensaje_requisito;
             } else {
-                $error = "Error al matricularte: " . $mysqli->error;
+                // 2) ¿ya está matriculado en este horario?
+                $check = $mysqli->prepare("
+                    SELECT id FROM matriculas
+                    WHERE estudiante_id = ? AND horario_id = ? AND estado_id = ?
+                ");
+                $check->bind_param("iii", $usuario_id, $horario_id, $estado_activa_id);
+                $check->execute();
+                if ($check->get_result()->num_rows > 0) {
+                    $error = "Ya estás matriculado en este horario.";
+                } else {
+                    // 3) Insertar matrícula
+                    $ins = $mysqli->prepare("
+                        INSERT INTO matriculas (estudiante_id, horario_id, fecha_matricula, estado_id)
+                        VALUES (?, ?, NOW(), ?)
+                    ");
+                    $ins->bind_param("iii", $usuario_id, $horario_id, $estado_activa_id);
+                    if ($ins->execute()) {
+                        $mensaje = "Te has matriculado correctamente en el curso.";
+                        // Actualizar cupos_disponibles (disminuir en 1)
+                        $upd = $mysqli->prepare("UPDATE horarios SET cupos_disponibles = cupos_disponibles - 1 WHERE id = ?");
+                        $upd->bind_param("i", $horario_id);
+                        $upd->execute();
+                        $upd->close();
+                    } else {
+                        $error = "Error al matricularte: " . $ins->error;
+                    }
+                    $ins->close();
+                }
+                $check->close();
             }
         }
     }
 }
 
-// Listado general de horarios
+// --------------------------------------------------------
+// OBTENER NIVEL MÁXIMO FINALIZADO PARA PINTAR LA TABLA
+// --------------------------------------------------------
+$nivel_max_finalizado = obtenerNivelMaximoFinalizado($mysqli, $usuario_id);
+$codigo_nivel_maximo  = $nivel_max_finalizado > 0
+    ? obtenerCodigoNivel($mysqli, $nivel_max_finalizado)
+    : null;
+
+// --------------------------------------------------------
+// CONSULTAR CURSOS DISPONIBLES (horarios activos con cupos)
+// --------------------------------------------------------
 $cursos = $mysqli->query("
-    SELECT h.id AS horario_id, c.nombre_curso, n.codigo_nivel,
-           d.nombre_dia, h.hora_inicio, h.hora_fin, h.cupos_disponibles
+    SELECT 
+        h.id AS horario_id,
+        c.nombre_curso,
+        c.nivel_id,
+        n.codigo_nivel,
+        d.nombre_dia,
+        h.hora_inicio,
+        h.hora_fin,
+        h.cupos_disponibles
     FROM horarios h
     JOIN cursos c ON h.curso_id = c.id
     JOIN niveles_academicos n ON c.nivel_id = n.id
@@ -66,6 +167,16 @@ include __DIR__ . "/../includes/header.php";
 ?>
 
 <h1 class="h4 fw-bold mt-3">Cursos disponibles</h1>
+
+<?php if ($codigo_nivel_maximo): ?>
+    <p class="text-muted small mb-1">
+        Tu nivel completado más alto: <strong><?= htmlspecialchars($codigo_nivel_maximo) ?></strong>
+    </p>
+<?php else: ?>
+    <p class="text-muted small mb-1">
+        Aún no tienes niveles finalizados. Puedes comenzar desde el nivel inicial (A1).
+    </p>
+<?php endif; ?>
 
 <?php if ($mensaje): ?>
     <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
@@ -89,6 +200,27 @@ include __DIR__ . "/../includes/header.php";
         <tbody>
         <?php if ($cursos && $cursos->num_rows > 0): ?>
             <?php while ($row = $cursos->fetch_assoc()): ?>
+                <?php
+                    $nivel_curso = (int)$row['nivel_id'];
+                    $codigo_nivel = $row['codigo_nivel'];
+
+                    $requiere_previo = $nivel_curso > 1;
+                    $tiene_requisito = true;
+                    $texto_requisito = "";
+
+                    if ($requiere_previo) {
+                        $nivel_requerido_id = $nivel_curso - 1;
+                        $codigo_requerido = obtenerCodigoNivel($mysqli, $nivel_requerido_id);
+                        if ($nivel_max_finalizado < $nivel_requerido_id) {
+                            $tiene_requisito = false;
+                            if ($codigo_requerido) {
+                                $texto_requisito = "Debes completar el nivel {$codigo_requerido} para inscribirte en este curso.";
+                            } else {
+                                $texto_requisito = "No cumples el requisito de nivel para este curso.";
+                            }
+                        }
+                    }
+                ?>
                 <tr>
                     <td><?= htmlspecialchars($row['nombre_curso']) ?></td>
                     <td><?= htmlspecialchars($row['codigo_nivel']) ?></td>
@@ -96,8 +228,16 @@ include __DIR__ . "/../includes/header.php";
                     <td><?= substr($row['hora_inicio'],0,5) ?> - <?= substr($row['hora_fin'],0,5) ?></td>
                     <td><?= (int)$row['cupos_disponibles'] ?></td>
                     <td>
-                        <a href="?matricular=<?= (int)$row['horario_id'] ?>"
-                           class="btn btn-sm btn-tt-primary">Matricular</a>
+                        <?php if ($tiene_requisito): ?>
+                            <a href="?matricular=<?= (int)$row['horario_id'] ?>"
+                               class="btn btn-sm btn-tt-primary">
+                                Matricular
+                            </a>
+                        <?php else: ?>
+                            <span class="text-danger small d-block">
+                                <?= htmlspecialchars($texto_requisito) ?>
+                            </span>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endwhile; ?>

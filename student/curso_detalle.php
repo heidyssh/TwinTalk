@@ -358,90 +358,131 @@ include __DIR__ . "/../includes/header.php";
             <?php else: ?>
                 <ul class="list-group list-group-flush">
                     <?php while ($t = $tareas->fetch_assoc()): ?>
-                        <li class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                        <strong class="small">
-                                            <?= htmlspecialchars($t['titulo']) ?>
-                                        </strong>
-                                        <?php if ($t['fecha_entrega']): ?>
-                                            <?php
-                                            $hoy = date('Y-m-d');
-                                            $vencida = ($t['fecha_entrega'] < $hoy);
-                                            ?>
-                                            <span class="badge <?= $vencida ? 'bg-danger' : 'bg-primary-subtle text-primary' ?> small">
-                                                Entrega: <?= htmlspecialchars($t['fecha_entrega']) ?>
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php if ($t['descripcion']): ?>
-                                        <p class="mb-1 small">
-                                            <?= nl2br(htmlspecialchars($t['descripcion'])) ?>
-                                        </p>
-                                    <?php endif; ?>
+                        <li class="list-group-item py-3">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1">
+            <?php
+                $hoy       = date('Y-m-d');
+                $fechaPub  = $t['fecha_publicacion'] ? date('d/m/Y H:i', strtotime($t['fecha_publicacion'])) : null;
+                $fechaLim  = $t['fecha_entrega'] ? date('d/m/Y', strtotime($t['fecha_entrega'])) : null;
+                $vencida   = ($t['fecha_entrega'] && $t['fecha_entrega'] < $hoy);
+                $entregada = !empty($t['mi_archivo']);
+            ?>
 
-                                    <?php if ($t['archivo_instrucciones']): ?>
-                                        <p class="mb-1 small">
-                                            Instrucciones:
-                                            <a href="<?= htmlspecialchars($t['archivo_instrucciones']) ?>" target="_blank">
-                                                Ver archivo
-                                            </a>
-                                        </p>
-                                    <?php endif; ?>
+            <!-- Título + fechas -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <strong class="small">
+                    <?= htmlspecialchars($t['titulo']) ?>
+                </strong>
 
-                                    <?php if ($t['mi_archivo']): ?>
-                                        <p class="mb-1 small">
-                                            <strong>Tu entrega:</strong>
-                                            <a href="<?= htmlspecialchars($t['mi_archivo']) ?>" target="_blank">
-                                                Ver archivo enviado
-                                            </a><br>
-                                            <?php if ($t['mi_fecha_entrega']): ?>
-                                                <span class="text-muted">
-                                                    Enviada el <?= date('d/m/Y H:i', strtotime($t['mi_fecha_entrega'])) ?>
-                                                </span><br>
-                                            <?php endif; ?>
-                                            <?php if ($t['mi_calificacion'] !== null): ?>
-                                                <span class="badge bg-success-subtle text-success mt-1">
-                                                    Nota: <?= htmlspecialchars($t['mi_calificacion']) ?>
-                                                </span>
-                                            <?php endif; ?>
-                                            <?php if ($t['mis_comentarios']): ?>
-                                                <div class="mt-1 small">
-                                                    <strong>Comentario del docente:</strong><br>
-                                                    <?= nl2br(htmlspecialchars($t['mis_comentarios'])) ?>
-                                                </div>
-                                            <?php endif; ?>
-                                        </p>
-                                        <p class="mb-1 small text-muted">
-                                            Puedes volver a subir el archivo si el docente lo permite; se reemplazará la entrega anterior.
-                                        </p>
-                                    <?php else: ?>
-                                        <p class="mb-1 small text-muted">
-                                            Aún no has enviado esta tarea.
-                                        </p>
-                                    <?php endif; ?>
+                <?php if ($fechaPub): ?>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small">
+                        Publicada: <?= $fechaPub ?>
+                    </span>
+                <?php endif; ?>
 
-                                    <!-- Formulario para subir / reemplazar archivo -->
-                                    <form method="post" enctype="multipart/form-data" class="mt-2">
-                                        <input type="hidden" name="accion" value="subir_tarea">
-                                        <input type="hidden" name="tarea_id" value="<?= $t['id'] ?>">
+                <?php if ($fechaLim): ?>
+                    <span class="badge small 
+                        <?= $vencida && !$entregada 
+                            ? 'bg-danger-subtle text-danger border border-danger-subtle' 
+                            : 'bg-primary-subtle text-primary border border-primary-subtle' 
+                        ?>">
+                        Vence: <?= $fechaLim ?>
+                    </span>
+                <?php endif; ?>
+            </div>
 
-                                        <div class="row g-2 align-items-center">
-                                            <div class="col-sm-8">
-                                                <input type="file" name="archivo_tarea"
-                                                       class="form-control form-control-sm" required>
-                                            </div>
-                                            <div class="col-sm-4 text-end">
-                                                <button type="submit" class="btn btn-sm btn-primary">
-                                                    <?= $t['mi_archivo'] ? 'Reemplazar archivo' : 'Subir archivo' ?>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </form>
+            <!-- Descripción -->
+            <?php if (!empty($t['descripcion'])): ?>
+                <p class="mb-2 small text-muted">
+                    <?= nl2br(htmlspecialchars($t['descripcion'])) ?>
+                </p>
+            <?php endif; ?>
+
+            <!-- Archivo de instrucciones -->
+            <?php if (!empty($t['archivo_instrucciones'])): ?>
+                <p class="mb-2 small">
+                    <i class="fa-solid fa-paperclip me-1"></i>
+                    Instrucciones:
+                    <a href="<?= htmlspecialchars($t['archivo_instrucciones']) ?>" target="_blank">
+                        Ver archivo
+                    </a>
+                </p>
+            <?php endif; ?>
+
+            <!-- Bloque de mi entrega -->
+            <?php if (!empty($t['mi_archivo'])): ?>
+                <div class="border rounded-3 p-2 bg-light mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="small fw-semibold d-block">Tu entrega</span>
+                            <a href="<?= htmlspecialchars($t['mi_archivo']) ?>" target="_blank" class="small">
+                                Ver archivo enviado
+                            </a>
+                        </div>
+                        <div class="text-end small">
+                            <?php if (!empty($t['mi_fecha_entrega'])): ?>
+                                <div class="text-muted">
+                                    Enviada el <?= date('d/m/Y H:i', strtotime($t['mi_fecha_entrega'])) ?>
                                 </div>
-                            </div>
-                        </li>
+                            <?php endif; ?>
+                            <?php if ($t['mi_calificacion'] !== null): ?>
+                                <div class="mt-1">
+                                    Nota:
+                                    <span class="badge bg-success-subtle text-success">
+                                        <?= htmlspecialchars($t['mi_calificacion']) ?>
+                                    </span>
+                                </div>
+                            <?php else: ?>
+                                <div class="mt-1 text-muted">
+                                    En revisión
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($t['mis_comentarios'])): ?>
+                        <div class="mt-2 small">
+                            <strong>Comentario del docente:</strong><br>
+                            <?= nl2br(htmlspecialchars($t['mis_comentarios'])) ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <p class="mb-2 small text-muted">
+                    Aún no has enviado tu archivo para esta tarea.
+                </p>
+            <?php endif; ?>
+        </div>
+
+        <!-- Columna derecha: subir / reemplazar archivo -->
+        <div class="mt-2 mt-md-0" style="min-width: 230px;">
+            <?php if ($t['fecha_entrega'] && $t['fecha_entrega'] < $hoy && empty($t['mi_archivo'])): ?>
+                <span class="badge bg-danger-subtle text-danger d-block text-center small mb-2">
+                    Entrega vencida
+                </span>
+            <?php endif; ?>
+
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="accion" value="subir_tarea">
+                <input type="hidden" name="tarea_id" value="<?= $t['id'] ?>">
+
+                <div class="row g-2 align-items-center">
+                    <div class="col-12 mb-1">
+                        <input type="file" name="archivo_tarea"
+                               class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="submit" class="btn btn-sm btn-primary w-100">
+                            <?= $t['mi_archivo'] ? 'Reemplazar archivo' : 'Subir archivo' ?>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</li>
+
                     <?php endwhile; ?>
                 </ul>
             <?php endif; ?>
