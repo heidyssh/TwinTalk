@@ -8,20 +8,21 @@ $mensaje = "";
 $error = "";
 
 // Helper para obtener id de estado por nombre
-function obtenerEstadoId($mysqli, $nombre) {
+function obtenerEstadoId($mysqli, $nombre)
+{
     $stmt = $mysqli->prepare("SELECT id FROM estados_matricula WHERE nombre_estado = ? LIMIT 1");
     $stmt->bind_param("s", $nombre);
     $stmt->execute();
     $res = $stmt->get_result();
     if ($res && $row = $res->fetch_assoc()) {
-        return (int)$row['id'];
+        return (int) $row['id'];
     }
     return null;
 }
 
 // Procesar retiro de matrícula
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['retirar_matricula'])) {
-    $matricula_id = (int)($_POST['matricula_id'] ?? 0);
+    $matricula_id = (int) ($_POST['matricula_id'] ?? 0);
 
     // Verificar que la matrícula pertenece al estudiante y está Activa
     $stmt = $mysqli->prepare("
@@ -121,57 +122,68 @@ include __DIR__ . "/../includes/header.php";
     <div class="table-responsive table-rounded">
         <table class="table align-middle mb-0">
             <thead class="table-light">
-            <tr>
-                <th>Curso</th>
-                <th>Nivel</th>
-                <th>Día</th>
-                <th>Hora</th>
-                <th>Estado</th>
-                <th>Nota promedio</th>
-                <th>Fecha matrícula</th>
-                <th>Acciones</th>
-            </tr>
+                <tr>
+                    <th>Curso</th>
+                    <th>Nivel</th>
+                    <th>Día</th>
+                    <th>Hora</th>
+                    <th>Estado</th>
+                    <th>Pago</th>
+                    <th>Nota promedio</th>
+                    <th>Fecha matrícula</th>
+                    <th>Acciones</th>
+                </tr>
             </thead>
             <tbody>
-            <?php if ($result->num_rows > 0): ?>
-                <?php while ($row = $result->fetch_assoc()): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($row['nombre_curso']) ?></td>
-                        <td><?= htmlspecialchars($row['codigo_nivel']) ?></td>
-                        <td><?= htmlspecialchars($row['nombre_dia']) ?></td>
-                        <td><?= substr($row['hora_inicio'],0,5) ?> - <?= substr($row['hora_fin'],0,5) ?></td>
-                        <td><?= htmlspecialchars($row['nombre_estado']) ?></td>
-                        <td>
-                            <?php if ($row['promedio'] !== null): ?>
-                                <?= number_format($row['promedio'], 2) ?>
-                            <?php else: ?>
-                                <span class="text-muted small">Sin notas</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($row['fecha_matricula']) ?></td>
-                        <td>
-                            <?php if ($row['nombre_estado'] === 'Activa'): ?>
-                                <form method="post" class="d-inline"
-                                      onsubmit="return confirm('¿Seguro que deseas retirarte de esta clase?');">
-                                    <input type="hidden" name="matricula_id"
-                                           value="<?= (int)$row['matricula_id'] ?>">
-                                    <button type="submit" name="retirar_matricula"
-                                            class="btn btn-sm btn-outline-danger me-1">
-                                        Retirarme
-                                    </button>
-                                </form>
-                            <?php endif; ?>
+                <?php if ($result->num_rows > 0): ?>
+                    <?php while ($row = $result->fetch_assoc()): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($row['nombre_curso']) ?></td>
+                            <td><?= htmlspecialchars($row['codigo_nivel']) ?></td>
+                            <td><?= htmlspecialchars($row['nombre_dia']) ?></td>
+                            <td><?= substr($row['hora_inicio'], 0, 5) ?> - <?= substr($row['hora_fin'], 0, 5) ?></td>
+                            <td><?= htmlspecialchars($row['nombre_estado']) ?></td>
+                            <td>
+                                <?php if ($row['monto_pagado'] !== null): ?>
+                                    L <?= number_format($row['monto_pagado'], 2) ?>
+                                    <?php if (!empty($row['nombre_metodo'])): ?>
+                                        <span class="text-muted small">(<?= htmlspecialchars($row['nombre_metodo']) ?>)</span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span class="text-muted small">Pendiente de pago</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($row['promedio'] !== null): ?>
+                                    <?= number_format($row['promedio'], 2) ?>
 
-                            <a href="curso_detalle.php?horario_id=<?= (int)$row['horario_id'] ?>"
-                               class="btn btn-sm btn-outline-primary mb-1">
-                                Ver curso
-                            </a>
-                        </td>
+                                    <span class="text-muted small">Sin notas</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= htmlspecialchars($row['fecha_matricula']) ?></td>
+                            <td>
+                                <?php if ($row['nombre_estado'] === 'Activa'): ?>
+                                    <form method="post" class="d-inline"
+                                        onsubmit="return confirm('¿Seguro que deseas retirarte de esta clase?');">
+                                        <input type="hidden" name="matricula_id" value="<?= (int) $row['matricula_id'] ?>">
+                                        <button type="submit" name="retirar_matricula" class="btn btn-sm btn-outline-danger me-1">
+                                            Retirarme
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+
+                                <a href="curso_detalle.php?horario_id=<?= (int) $row['horario_id'] ?>"
+                                    class="btn btn-sm btn-outline-primary mb-1">
+                                    Ver curso
+                                </a>
+                            </td>
+                        </tr>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="8" class="text-muted">Aún no tienes matrículas registradas.</td>
                     </tr>
-                <?php endwhile; ?>
-            <?php else: ?>
-                <tr><td colspan="8" class="text-muted">Aún no tienes matrículas registradas.</td></tr>
-            <?php endif; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>

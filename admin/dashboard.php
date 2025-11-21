@@ -86,6 +86,12 @@ include __DIR__ . "/../includes/header.php";
                         <a href="horarios.php" class="btn btn-outline-secondary btn-sm rounded-pill">
                             <i class="fa-regular fa-calendar-days me-1"></i> Horarios
                         </a>
+                        <a href="mensajes.php" class="btn btn-outline-secondary btn-sm rounded-pill">
+                            <i class="fa-regular fa-envelope me-1"></i> Mensajes
+                        </a>
+                        <a href="pagos.php" class="btn btn-outline-secondary btn-sm rounded-pill">
+                            <i class="fa-solid fa-money-bill-wave me-1"></i> Pagos
+                        </a>
                         <a href="perfil.php" class="btn btn-outline-secondary btn-sm rounded-pill">
                             <i class="fa-regular fa-id-badge me-1"></i> Mi perfil
                         </a>

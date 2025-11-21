@@ -4,11 +4,11 @@ require_once __DIR__ . "/../includes/auth.php";
 require_role([1]); // solo admin
 
 $mensaje = "";
-$error   = "";
+$error = "";
 
 // Eliminar / desactivar curso
 if (isset($_GET['eliminar']) && ctype_digit($_GET['eliminar'])) {
-    $id_eliminar = (int)$_GET['eliminar'];
+    $id_eliminar = (int) $_GET['eliminar'];
     $stmt = $mysqli->prepare("UPDATE cursos SET activo = 0 WHERE id = ?");
     $stmt->bind_param("i", $id_eliminar);
     if ($stmt->execute()) {
@@ -38,20 +38,44 @@ if (isset($_GET['editar']) && ctype_digit($_GET['editar'])) {
     $res = $stmt->get_result();
     if ($res && $res->num_rows === 1) {
         $curso_editar = $res->fetch_assoc();
+
+        // Nuevo: traer precio vigente (si existe)
+        $stmtPrecio = $mysqli->prepare("
+            SELECT precio
+            FROM precios_cursos
+            WHERE curso_id = ?
+              AND activo = 1
+              AND fecha_inicio_vigencia <= CURDATE()
+              AND (fecha_fin_vigencia IS NULL OR fecha_fin_vigencia >= CURDATE())
+            ORDER BY fecha_inicio_vigencia DESC
+            LIMIT 1
+        ");
+        if ($stmtPrecio) {
+            $stmtPrecio->bind_param("i", $id_editar);
+            $stmtPrecio->execute();
+            $resPrecio = $stmtPrecio->get_result();
+            if ($resPrecio && ($rowPrecio = $resPrecio->fetch_assoc())) {
+                $curso_editar['precio_actual'] = (float)$rowPrecio['precio'];
+            }
+            $stmtPrecio->close();
+        }
     }
     $stmt->close();
 }
 
+
 // Crear / actualizar curso
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre_curso     = trim($_POST['nombre_curso'] ?? '');
-    $nivel_id         = (int)($_POST['nivel_id'] ?? 0);
-    $duracion_horas   = (int)($_POST['duracion_horas'] ?? 0);
-    $capacidad_maxima = (int)($_POST['capacidad_maxima'] ?? 0);
-    $descripcion      = trim($_POST['descripcion'] ?? '');
-    $curso_id         = isset($_POST['curso_id']) && ctype_digit($_POST['curso_id'])
-                        ? (int)$_POST['curso_id']
-                        : 0;
+    $nombre_curso = trim($_POST['nombre_curso'] ?? '');
+    $nivel_id = (int) ($_POST['nivel_id'] ?? 0);
+    $duracion_horas = (int) ($_POST['duracion_horas'] ?? 0);
+    $capacidad_maxima = (int) ($_POST['capacidad_maxima'] ?? 0);
+    $descripcion = trim($_POST['descripcion'] ?? '');
+    $precio_raw = trim($_POST['precio'] ?? '');
+    $precio = ($precio_raw !== '' ? (float) $precio_raw : null);
+    $curso_id = isset($_POST['curso_id']) && ctype_digit($_POST['curso_id'])
+        ? (int) $_POST['curso_id']
+        : 0;
 
     if ($nombre_curso === '' || $nivel_id <= 0 || $duracion_horas <= 0 || $capacidad_maxima <= 0) {
         $error = "Completa todos los campos obligatorios.";
@@ -86,12 +110,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $curso_id
                 );
                 if ($stmt2->execute()) {
-                    $mensaje       = "Curso actualizado correctamente.";
-                    $curso_editar  = null;
+                    $mensaje = "Curso actualizado correctamente.";
+                    $curso_editar = null;
+
+                    // Nuevo: si se indicó un precio válido, actualizamos precios_cursos
+                    if ($precio !== null && $precio > 0) {
+                        // Desactivar precios vigentes anteriores para este curso
+                        $stmtPrecio = $mysqli->prepare("
+            UPDATE precios_cursos
+            SET activo = 0
+            WHERE curso_id = ? AND activo = 1
+        ");
+                        if ($stmtPrecio) {
+                            $stmtPrecio->bind_param("i", $curso_id);
+                            $stmtPrecio->execute();
+                            $stmtPrecio->close();
+                        }
+
+                        // Insertar nuevo precio vigente
+                        $stmtPrecioIns = $mysqli->prepare("
+            INSERT INTO precios_cursos (curso_id, precio, fecha_inicio_vigencia, activo)
+            VALUES (?, ?, CURDATE(), 1)
+        ");
+                        if ($stmtPrecioIns) {
+                            $stmtPrecioIns->bind_param("id", $curso_id, $precio);
+                            $stmtPrecioIns->execute();
+                            $stmtPrecioIns->close();
+                        }
+                    }
                 } else {
                     $error = "Error al actualizar el curso.";
                 }
                 $stmt2->close();
+
             } else {
                 // Crear
                 $stmt2 = $mysqli->prepare("
@@ -108,10 +159,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 if ($stmt2->execute()) {
                     $mensaje = "Curso creado correctamente.";
+
+                    // Nuevo: si se indicó un precio válido, lo guardamos como precio vigente
+                    if ($precio !== null && $precio > 0) {
+                        $curso_nuevo_id = $stmt2->insert_id;
+
+                        $stmtPrecioIns = $mysqli->prepare("
+            INSERT INTO precios_cursos (curso_id, precio, fecha_inicio_vigencia, activo)
+            VALUES (?, ?, CURDATE(), 1)
+        ");
+                        if ($stmtPrecioIns) {
+                            $stmtPrecioIns->bind_param("id", $curso_nuevo_id, $precio);
+                            $stmtPrecioIns->execute();
+                            $stmtPrecioIns->close();
+                        }
+                    }
                 } else {
                     $error = "Error al crear el curso.";
                 }
                 $stmt2->close();
+
             }
         }
         $stmt->close();
@@ -120,11 +187,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Listar cursos
 $cursos = $mysqli->query("
-    SELECT c.*, n.codigo_nivel, n.nombre_nivel
+    SELECT 
+        c.*,
+        n.codigo_nivel,
+        n.nombre_nivel,
+        pc.precio AS precio_actual
     FROM cursos c
     JOIN niveles_academicos n ON c.nivel_id = n.id
+    LEFT JOIN (
+        SELECT curso_id, precio
+        FROM precios_cursos
+        WHERE activo = 1
+          AND fecha_inicio_vigencia <= CURDATE()
+          AND (fecha_fin_vigencia IS NULL OR fecha_fin_vigencia >= CURDATE())
+    ) pc ON pc.curso_id = c.id
     ORDER BY c.activo DESC, c.nombre_curso ASC
 ");
+
 
 include __DIR__ . "/../includes/header.php";
 ?>
@@ -148,13 +227,13 @@ include __DIR__ . "/../includes/header.php";
                     </h5>
                     <form method="post">
                         <?php if ($curso_editar): ?>
-                            <input type="hidden" name="curso_id" value="<?= (int)$curso_editar['id'] ?>">
+                            <input type="hidden" name="curso_id" value="<?= (int) $curso_editar['id'] ?>">
                         <?php endif; ?>
 
                         <div class="mb-2">
                             <label class="form-label">Nombre del curso *</label>
                             <input type="text" name="nombre_curso" class="form-control"
-                                   value="<?= htmlspecialchars($curso_editar['nombre_curso'] ?? '') ?>" required>
+                                value="<?= htmlspecialchars($curso_editar['nombre_curso'] ?? '') ?>" required>
                         </div>
 
                         <div class="mb-2">
@@ -162,8 +241,7 @@ include __DIR__ . "/../includes/header.php";
                             <select name="nivel_id" class="form-select" required>
                                 <option value="">Selecciona nivel</option>
                                 <?php foreach ($niveles as $niv): ?>
-                                    <option value="<?= (int)$niv['id'] ?>"
-                                        <?= isset($curso_editar['nivel_id']) && $curso_editar['nivel_id'] == $niv['id'] ? 'selected' : '' ?>>
+                                    <option value="<?= (int) $niv['id'] ?>" <?= isset($curso_editar['nivel_id']) && $curso_editar['nivel_id'] == $niv['id'] ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($niv['codigo_nivel'] . " - " . $niv['nombre_nivel']) ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -171,21 +249,31 @@ include __DIR__ . "/../includes/header.php";
                         </div>
 
                         <div class="row g-2">
-                            <div class="col-md-6 mb-2">
+                            <div class="col-md-4 mb-2">
                                 <label class="form-label">Duración (horas) *</label>
                                 <input type="number" name="duracion_horas" min="1" class="form-control"
-                                       value="<?= htmlspecialchars($curso_editar['duracion_horas'] ?? '1') ?>" required>
+                                    value="<?= htmlspecialchars($curso_editar['duracion_horas'] ?? '1') ?>" required>
                             </div>
-                            <div class="col-md-6 mb-2">
+                            <div class="col-md-4 mb-2">
                                 <label class="form-label">Capacidad máxima *</label>
                                 <input type="number" name="capacidad_maxima" min="1" class="form-control"
-                                       value="<?= htmlspecialchars($curso_editar['capacidad_maxima'] ?? '10') ?>" required>
+                                    value="<?= htmlspecialchars($curso_editar['capacidad_maxima'] ?? '10') ?>" required>
+                            </div>
+                             <div class="col-md-4 mb-2">
+                                <label class="form-label">Precio del curso (L.)</label>
+                                <input type="number" name="precio" min="0" step="0.01" class="form-control"
+                                    value="<?= isset($curso_editar['precio_actual']) ? htmlspecialchars($curso_editar['precio_actual']) : '' ?>"
+                                    placeholder="Ej: 1200.00">
+                                <div class="form-text small">
+                                    Este precio se usará al matricular estudiantes.
+                                </div>
                             </div>
                         </div>
 
                         <div class="mb-2">
                             <label class="form-label">Descripción</label>
-                            <textarea name="descripcion" class="form-control" rows="3"><?= htmlspecialchars($curso_editar['descripcion'] ?? '') ?></textarea>
+                            <textarea name="descripcion" class="form-control"
+                                rows="3"><?= htmlspecialchars($curso_editar['descripcion'] ?? '') ?></textarea>
                         </div>
 
                         <div class="mt-3 text-end">
@@ -214,47 +302,58 @@ include __DIR__ . "/../includes/header.php";
                                     <th>Nivel</th>
                                     <th>Duración</th>
                                     <th>Capacidad</th>
+                                    <th>Precio actual</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
-                            <?php if ($cursos && $cursos->num_rows > 0): ?>
-                                <?php while ($c = $cursos->fetch_assoc()): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($c['nombre_curso']) ?></td>
-                                        <td><?= htmlspecialchars($c['codigo_nivel']) ?></td>
-                                        <td><?= (int)$c['duracion_horas'] ?> h</td>
-                                        <td><?= (int)$c['capacidad_maxima'] ?></td>
-                                        <td>
-                                            <?php if ($c['activo']): ?>
-                                                <span class="badge bg-success">Activo</span>
-                                            <?php else: ?>
-                                                <span class="badge bg-secondary">Inactivo</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <a href="cursos.php?editar=<?= (int)$c['id'] ?>"
-                                               class="btn btn-outline-primary btn-sm">
-                                                Editar
-                                            </a>
-                                            <?php if ($c['activo']): ?>
-                                                <a href="cursos.php?eliminar=<?= (int)$c['id'] ?>"
-                                                   class="btn btn-outline-danger btn-sm"
-                                                   onclick="return confirm('¿Desactivar este curso?');">
-                                                    Desactivar
+                                <?php if ($cursos && $cursos->num_rows > 0): ?>
+                                    <?php while ($c = $cursos->fetch_assoc()): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($c['nombre_curso']) ?></td>
+                                            <td><?= htmlspecialchars($c['codigo_nivel']) ?></td>
+                                            <td><?= (int) $c['duracion_horas'] ?> h</td>
+                                            <td><?= (int) $c['capacidad_maxima'] ?></td>
+                                            <td>
+                                                <?php if (!is_null($c['precio_actual'])): ?>
+                                                    L <?= number_format($c['precio_actual'], 2) ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted small">Sin precio</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($c['activo']): ?>
+                                                    <span class="badge bg-success">Activo</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Inactivo</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <a href="cursos.php?editar=<?= (int) $c['id'] ?>"
+                                                    class="btn btn-outline-primary btn-sm">
+                                                    Editar
                                                 </a>
-                                            <?php endif; ?>
-                                        </td>
+                                                <?php if ($c['activo']): ?>
+                                                    <a href="cursos.php?eliminar=<?= (int) $c['id'] ?>"
+                                                        class="btn btn-outline-danger btn-sm"
+                                                        onclick="return confirm('¿Desactivar este curso?');">
+                                                        Desactivar
+                                                    </a>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                <?php else: ?>
+                                    <tr>
+                                        <td colspan="6" class="text-muted">No hay cursos registrados.</td>
                                     </tr>
-                                <?php endwhile; ?>
-                            <?php else: ?>
-                                <tr><td colspan="6" class="text-muted">No hay cursos registrados.</td></tr>
-                            <?php endif; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
-                    <p class="small text-muted mb-0">* Los cursos desactivados no aparecerán para matrícula ni horarios.</p>
+                    <p class="small text-muted mb-0">* Los cursos desactivados no aparecerán para matrícula ni horarios.
+                    </p>
                 </div>
             </div>
         </div>
