@@ -143,6 +143,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Ocurrió un error al subir la imagen (código: {$file['error']}).";
         }
     }
+        // 5) Gestionar contactos de emergencia
+    elseif (isset($_POST['guardar_contacto'])) {
+        $contacto_id        = (int)($_POST['contacto_id'] ?? 0);
+        $nombre_contacto    = trim($_POST['nombre_contacto'] ?? '');
+        $telefono_contacto  = trim($_POST['telefono_contacto'] ?? '');
+        $parentesco         = trim($_POST['parentesco'] ?? '');
+        $principal          = isset($_POST['principal']) ? 1 : 0;
+
+        if ($nombre_contacto === '' || $telefono_contacto === '') {
+            $error = "Nombre y teléfono del contacto son obligatorios.";
+        } else {
+            // Si se marca como principal, quitar principal de los demás
+            if ($principal === 1) {
+                $stmt = $mysqli->prepare("UPDATE contactos_emergencia SET principal = 0 WHERE estudiante_id = ?");
+                $stmt->bind_param("i", $usuario_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            if ($contacto_id > 0) {
+                // Actualizar
+                $stmt = $mysqli->prepare("
+                    UPDATE contactos_emergencia
+                    SET nombre_contacto = ?, telefono_contacto = ?, parentesco = ?, principal = ?
+                    WHERE id = ? AND estudiante_id = ?
+                ");
+                $stmt->bind_param("sssiii", $nombre_contacto, $telefono_contacto, $parentesco, $principal, $contacto_id, $usuario_id);
+            } else {
+                // Insertar nuevo
+                $stmt = $mysqli->prepare("
+                    INSERT INTO contactos_emergencia (estudiante_id, nombre_contacto, telefono_contacto, parentesco, principal)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param("isssi", $usuario_id, $nombre_contacto, $telefono_contacto, $parentesco, $principal);
+            }
+
+            if ($stmt->execute()) {
+                $mensaje = "Contacto de emergencia guardado correctamente.";
+            } else {
+                $error = "Error al guardar el contacto de emergencia.";
+            }
+            $stmt->close();
+        }
+    }
+    elseif (isset($_POST['eliminar_contacto'])) {
+        $contacto_id = (int)($_POST['contacto_id'] ?? 0);
+        if ($contacto_id > 0) {
+            $stmt = $mysqli->prepare("DELETE FROM contactos_emergencia WHERE id = ? AND estudiante_id = ?");
+            $stmt->bind_param("ii", $contacto_id, $usuario_id);
+            if ($stmt->execute()) {
+                $mensaje = "Contacto eliminado.";
+            } else {
+                $error = "No se pudo eliminar el contacto.";
+            }
+            $stmt->close();
+        }
+    }
+
 }
 
 // Obtener datos del usuario
@@ -153,6 +211,23 @@ $usuario = $stmt->get_result()->fetch_assoc();
 
 // Avatar actual
 $avatar_actual = $usuario['foto_perfil'] ?: "/twintalk/assets/img/avatars/avatar1.png";
+
+// Cargar contactos de emergencia del estudiante
+$stmt = $mysqli->prepare("
+    SELECT id, nombre_contacto, telefono_contacto, parentesco, principal
+    FROM contactos_emergencia
+    WHERE estudiante_id = ?
+    ORDER BY principal DESC, id ASC
+");
+$stmt->bind_param("i", $usuario_id);
+$stmt->execute();
+$contactos_result = $stmt->get_result();
+$contactos = [];
+while ($row = $contactos_result->fetch_assoc()) {
+    $contactos[] = $row;
+}
+$stmt->close();
+
 
 include __DIR__ . "/../includes/header.php";
 ?>
@@ -274,7 +349,126 @@ include __DIR__ . "/../includes/header.php";
             </form>
         </div>
     </div>
+</div> <!-- cierra row g-3 existente -->
+
+<!-- Contactos de emergencia -->
+<div class="row g-3 mt-3">
+    <div class="col-md-8">
+        <div class="card card-soft p-3">
+            <h2 class="h6 fw-bold mb-3">Contactos de emergencia</h2>
+
+            <?php if (!empty($contactos)): ?>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                                <th>Parentesco</th>
+                                <th>Principal</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($contactos as $c): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($c['nombre_contacto']) ?></td>
+                                <td><?= htmlspecialchars($c['telefono_contacto']) ?></td>
+                                <td><?= htmlspecialchars($c['parentesco'] ?: '-') ?></td>
+                                <td>
+                                    <?php if ($c['principal']): ?>
+                                        <span class="badge bg-success">Principal</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-light text-muted">Secundario</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-end">
+                                    <!-- Botón rápido para cargar en el formulario -->
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary"
+                                            onclick="ttEditarContacto(
+                                                <?= (int)$c['id'] ?>,
+                                                '<?= htmlspecialchars($c['nombre_contacto'], ENT_QUOTES) ?>',
+                                                '<?= htmlspecialchars($c['telefono_contacto'], ENT_QUOTES) ?>',
+                                                '<?= htmlspecialchars($c['parentesco'] ?? '', ENT_QUOTES) ?>',
+                                                <?= (int)$c['principal'] ?>
+                                            )">
+                                        Editar
+                                    </button>
+
+                                    <form method="post" class="d-inline"
+                                          onsubmit="return confirm('¿Eliminar este contacto?');">
+                                        <input type="hidden" name="contacto_id" value="<?= (int)$c['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger" name="eliminar_contacto">
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <p class="text-muted small mb-2">
+                    Aún no tienes contactos de emergencia registrados.
+                </p>
+            <?php endif; ?>
+
+            <hr>
+
+            <!-- Formulario para agregar/editar -->
+            <form method="post">
+                <input type="hidden" name="contacto_id" id="contacto_id" value="">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Nombre del contacto</label>
+                        <input type="text" name="nombre_contacto" id="nombre_contacto" class="form-control" required>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Teléfono</label>
+                        <input type="text" name="telefono_contacto" id="telefono_contacto" class="form-control" required>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Parentesco</label>
+                        <input type="text" name="parentesco" id="parentesco" class="form-control">
+                    </div>
+                    <div class="col-md-6 mb-2 d-flex align-items-center">
+                        <div class="form-check mt-4">
+                            <input class="form-check-input" type="checkbox" value="1" id="principal" name="principal">
+                            <label class="form-check-label" for="principal">
+                                Marcar como contacto principal
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-tt-primary btn-sm" name="guardar_contacto">
+                    Guardar contacto
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="ttLimpiarContacto()">
+                    Limpiar formulario
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
+
+<script>
+function ttEditarContacto(id, nombre, telefono, parentesco, principal) {
+    document.getElementById('contacto_id').value = id;
+    document.getElementById('nombre_contacto').value = nombre;
+    document.getElementById('telefono_contacto').value = telefono;
+    document.getElementById('parentesco').value = parentesco;
+    document.getElementById('principal').checked = principal === 1;
+}
+function ttLimpiarContacto() {
+    document.getElementById('contacto_id').value = '';
+    document.getElementById('nombre_contacto').value = '';
+    document.getElementById('telefono_contacto').value = '';
+    document.getElementById('parentesco').value = '';
+    document.getElementById('principal').checked = false;
+}
 
 <script>
 function ttTogglePassword(inputId, btn) {

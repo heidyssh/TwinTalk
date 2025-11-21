@@ -47,6 +47,38 @@ function obtenerCodigoNivel($mysqli, $nivel_id) {
     return $res ? $res['codigo_nivel'] : null;
 }
 
+// Obtener precio vigente para un curso
+function obtenerPrecioCursoActual($mysqli, $curso_id) {
+    $stmt = $mysqli->prepare("
+        SELECT precio
+        FROM precios_cursos
+        WHERE curso_id = ?
+          AND activo = 1
+          AND fecha_inicio_vigencia <= CURDATE()
+          AND (fecha_fin_vigencia IS NULL OR fecha_fin_vigencia >= CURDATE())
+        ORDER BY fecha_inicio_vigencia DESC
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $curso_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $precio = null;
+    if ($res && $row = $res->fetch_assoc()) {
+        $precio = (float)$row['precio'];
+    }
+    $stmt->close();
+    return $precio;
+}
+
+// Obtener un método de pago por defecto (el primero que exista)
+function obtenerMetodoPagoDefecto($mysqli) {
+    $res = $mysqli->query("SELECT id FROM metodos_pago ORDER BY id ASC LIMIT 1");
+    if ($res && $row = $res->fetch_assoc()) {
+        return (int)$row['id'];
+    }
+    return null;
+}
+
 // --------------------------------------------------------
 // PROCESAR MATRICULACIÓN (backend protegido con requisito)
 // --------------------------------------------------------
@@ -110,12 +142,40 @@ if (isset($_GET['matricular'])) {
                 if ($check->get_result()->num_rows > 0) {
                     $error = "Ya estás matriculado en este horario.";
                 } else {
-                    // 3) Insertar matrícula
+                    // 3) Obtener precio y método de pago por defecto
+                    $curso_id = (int)$cursoData['curso_id'];
+                    $precio   = obtenerPrecioCursoActual($mysqli, $curso_id);
+                    $metodo_default = obtenerMetodoPagoDefecto($mysqli);
+
+                    // Definir fecha de vencimiento (por ejemplo, 30 días después)
+                    $fecha_vencimiento = null;
+                    if ($precio !== null) {
+                        $fecha_vencimiento = date('Y-m-d', strtotime('+30 days'));
+                    }
+
                     $ins = $mysqli->prepare("
-                        INSERT INTO matriculas (estudiante_id, horario_id, fecha_matricula, estado_id)
-                        VALUES (?, ?, NOW(), ?)
+                        INSERT INTO matriculas (
+                            estudiante_id, horario_id, fecha_matricula,
+                            estado_id, metodo_pago_id, monto_pagado, fecha_vencimiento
+                        )
+                        VALUES (?, ?, NOW(), ?, ?, ?, ?)
                     ");
-                    $ins->bind_param("iii", $usuario_id, $horario_id, $estado_activa_id);
+
+                    // Si no hay precio o método, dejamos NULL
+                    $metodo_pago_id = $metodo_default; // puede ser null
+                    $monto_pagado   = $precio;         // puede ser null
+
+                    // iiiids = int, int, int, int, double, string
+                    $ins->bind_param(
+                        "iiiids",
+                        $usuario_id,
+                        $horario_id,
+                        $estado_activa_id,
+                        $metodo_pago_id,
+                        $monto_pagado,
+                        $fecha_vencimiento
+                    );
+
                     if ($ins->execute()) {
                         $mensaje = "Te has matriculado correctamente en el curso.";
                         // Actualizar cupos_disponibles (disminuir en 1)
@@ -148,6 +208,7 @@ $codigo_nivel_maximo  = $nivel_max_finalizado > 0
 $cursos = $mysqli->query("
     SELECT 
         h.id AS horario_id,
+        c.id AS curso_id,
         c.nombre_curso,
         c.nivel_id,
         n.codigo_nivel,
@@ -194,6 +255,7 @@ include __DIR__ . "/../includes/header.php";
             <th>Día</th>
             <th>Hora</th>
             <th>Cupos</th>
+            <th>Precio</th>
             <th></th>
         </tr>
         </thead>
@@ -220,6 +282,9 @@ include __DIR__ . "/../includes/header.php";
                             }
                         }
                     }
+
+                    // Precio del curso (según precios_cursos)
+                    $precio_row = obtenerPrecioCursoActual($mysqli, (int)$row['curso_id']);
                 ?>
                 <tr>
                     <td><?= htmlspecialchars($row['nombre_curso']) ?></td>
@@ -227,6 +292,19 @@ include __DIR__ . "/../includes/header.php";
                     <td><?= htmlspecialchars($row['nombre_dia']) ?></td>
                     <td><?= substr($row['hora_inicio'],0,5) ?> - <?= substr($row['hora_fin'],0,5) ?></td>
                     <td><?= (int)$row['cupos_disponibles'] ?></td>
+
+                    <!-- Columna PRECIO -->
+                    <td>
+                        <?php
+                            if ($precio_row !== null) {
+                                echo "L " . number_format($precio_row, 2);
+                            } else {
+                                echo '<span class="text-muted small">Sin precio</span>';
+                            }
+                        ?>
+                    </td>
+
+                    <!-- Columna de acción (matricular / requisito) -->
                     <td>
                         <?php if ($tiene_requisito): ?>
                             <a href="?matricular=<?= (int)$row['horario_id'] ?>"
@@ -242,7 +320,7 @@ include __DIR__ . "/../includes/header.php";
                 </tr>
             <?php endwhile; ?>
         <?php else: ?>
-            <tr><td colspan="6" class="text-muted">No hay horarios disponibles.</td></tr>
+            <tr><td colspan="7" class="text-muted">No hay horarios disponibles.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

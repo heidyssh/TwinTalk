@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['retirar_matricula']))
 
 // Consulta de historial con nota promedio (calificaciones.publicado = 1)
 $stmt = $mysqli->prepare("
-    SELECT 
+   SELECT 
         m.id AS matricula_id,
         h.id AS horario_id,
         c.nombre_curso,
@@ -77,6 +77,8 @@ $stmt = $mysqli->prepare("
         h.hora_fin,
         em.nombre_estado,
         m.fecha_matricula,
+        m.monto_pagado,
+        mp.nombre_metodo,
         cal.promedio
     FROM matriculas m
     JOIN horarios h ON m.horario_id = h.id
@@ -84,6 +86,7 @@ $stmt = $mysqli->prepare("
     JOIN niveles_academicos n ON c.nivel_id = n.id
     JOIN dias_semana d ON h.dia_semana_id = d.id
     JOIN estados_matricula em ON m.estado_id = em.id
+    LEFT JOIN metodos_pago mp ON m.metodo_pago_id = mp.id
     LEFT JOIN (
         SELECT matricula_id, AVG(puntaje) AS promedio
         FROM calificaciones

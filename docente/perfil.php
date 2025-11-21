@@ -77,6 +77,20 @@ $stmt->bind_param("i", $usuario_id);
 $stmt->execute();
 $info = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+// Datos del docente (tabla docentes)
+$stmt = $mysqli->prepare("SELECT titulo_id, especialidad, fecha_contratacion FROM docentes WHERE id = ?");
+$stmt->bind_param("i", $usuario_id);
+$stmt->execute();
+$docente = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+// Lista de títulos académicos
+$titulos_academicos = $mysqli->query("
+    SELECT id, nombre_titulo, nivel_titulo
+    FROM titulos_academicos
+    ORDER BY nombre_titulo ASC
+");
+
 
 // -------------------- MANEJO DE FORMULARIOS --------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -90,6 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $direccion       = trim($_POST['direccion'] ?? '');
         $ciudad          = trim($_POST['ciudad'] ?? '');
         $pais            = trim($_POST['pais'] ?? '');
+        $especialidad    = trim($_POST['especialidad'] ?? '');
+        $titulo_id_post  = $_POST['titulo_id'] ?? '';
+
 
         // Actualizar tabla usuarios
         $sqlUpUser = "UPDATE usuarios SET nombre = ?, apellido = ?, telefono = ? WHERE id = ?";
@@ -127,6 +144,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $stmt->close();
     }
+            // Actualizar especialidad del docente
+        $stmt = $mysqli->prepare("UPDATE docentes SET especialidad = ? WHERE id = ?");
+        $stmt->bind_param("si", $especialidad, $usuario_id);
+        $stmt->execute();
+        $stmt->close();
+
+        // Actualizar título académico si se seleccionó alguno
+        if ($titulo_id_post !== '') {
+            $titulo_id = (int)$titulo_id_post;
+            $stmt = $mysqli->prepare("UPDATE docentes SET titulo_id = ? WHERE id = ?");
+            $stmt->bind_param("ii", $titulo_id, $usuario_id);
+            $stmt->execute();
+            $stmt->close();
+        }
+
 
     // 2) Cambiar contraseña
     elseif (isset($_POST['cambiar_password'])) {
@@ -338,6 +370,34 @@ include __DIR__ . '/../includes/header.php';
                             <input class="form-control" name="telefono"
                                    value="<?= htmlspecialchars($usuario['telefono'] ?? '') ?>">
                         </div>
+                                                <div class="col-md-6 mb-3">
+                            <label class="form-label">Título académico</label>
+                            <select name="titulo_id" class="form-select">
+                                <option value="">-- Selecciona --</option>
+                                <?php if ($titulos_academicos): ?>
+                                    <?php while ($t = $titulos_academicos->fetch_assoc()): ?>
+                                        <?php
+                                            $selected = '';
+                                            if (!empty($docente['titulo_id']) && (int)$docente['titulo_id'] === (int)$t['id']) {
+                                                $selected = 'selected';
+                                            }
+                                        ?>
+                                        <option value="<?= (int)$t['id'] ?>" <?= $selected ?>>
+                                            <?= htmlspecialchars($t['nombre_titulo']) ?>
+                                            <?php if (!empty($t['nivel_titulo'])): ?>
+                                                (<?= htmlspecialchars($t['nivel_titulo']) ?>)
+                                            <?php endif; ?>
+                                        </option>
+                                    <?php endwhile; ?>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Especialidad</label>
+                            <input type="text" name="especialidad" class="form-control"
+                                   value="<?= htmlspecialchars($docente['especialidad'] ?? '') ?>">
+                        </div>
+
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Fecha de nacimiento</label>
                             <input type="date" name="fecha_nacimiento" class="form-control"

@@ -82,6 +82,22 @@ $stmtEst->execute();
 $resEst = $stmtEst->get_result();
 $est = $resEst->fetch_assoc();
 $stmtEst->close();
+// Contactos de emergencia del estudiante
+$contactos = [];
+$stmtCE = $mysqli->prepare("
+    SELECT nombre_contacto, telefono_contacto, parentesco, principal
+    FROM contactos_emergencia
+    WHERE estudiante_id = ?
+    ORDER BY principal DESC, id ASC
+");
+$stmtCE->bind_param("i", $estudiante_id);
+$stmtCE->execute();
+$resCE = $stmtCE->get_result();
+while ($row = $resCE->fetch_assoc()) {
+    $contactos[] = $row;
+}
+$stmtCE->close();
+
 
 include __DIR__ . "/../includes/header.php";
 ?>
@@ -160,6 +176,29 @@ include __DIR__ . "/../includes/header.php";
                 <strong>País:</strong>
                 <?= htmlspecialchars($est['pais'] ?: 'No registrado') ?>
             </p>
+                        <hr class="my-3">
+            <h2 class="h6 fw-bold mb-2">Contactos de emergencia</h2>
+            <?php if (!empty($contactos)): ?>
+                <ul class="list-unstyled small mb-0">
+                    <?php foreach ($contactos as $c): ?>
+                        <li class="mb-1">
+                            <strong><?= htmlspecialchars($c['nombre_contacto']) ?></strong>
+                            <?php if ($c['principal']): ?>
+                                <span class="badge bg-success ms-1">Principal</span>
+                            <?php endif; ?>
+                            <br>
+                            Tel: <?= htmlspecialchars($c['telefono_contacto']) ?>
+                            <?php if (!empty($c['parentesco'])): ?>
+                                <span class="text-muted"> (<?= htmlspecialchars($c['parentesco']) ?>)</span>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <p class="text-muted small mb-0">
+                    Este estudiante aún no ha registrado contactos de emergencia.
+                </p>
+            <?php endif; ?>
         </div>
     </div>
 
